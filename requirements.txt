@@ -1,1 +1,7 @@
 pandas
+nbformat>=4.2.0 
+plotly
+dash
+dash_bootstrap_components
+pandas_dash
+watchdog
