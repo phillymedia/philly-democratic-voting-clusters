@@ -12,7 +12,8 @@
 
 body {
     font-family: monospace;
-    background-color: black;
+    background-color: #121111;
+    color:yellow;
     /* font-size: 40px; */
     /* letter-spacing: .05em; */
     & .dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner table { 
@@ -24,18 +25,20 @@ h1,h2,h3,h4,h5 {
 
 }
 
+h1 { 
+    font-family: 'philadelphia3d', 'Baskerville', 'Arial'; 
+    font-size:100px;
+    letter-spacing: .2em;
+}
+
 #title-div {
     text-align: center;
     color:yellow;
-    & h1 { 
-        font-family: 'philadelphia3d', 'Baskerville', 'Arial'; 
-        font-size:100px;
-        letter-spacing: .2em;
-    }
+    /* &  */
 }
 
 .card {
-    background: rgba(0,0,0,0.6);
+    background: rgba(0,0,0,0);
 }
 
 
@@ -47,12 +50,12 @@ h1,h2,h3,h4,h5 {
     overflow:hidden;
 
 }
-#layout-col-left { 
+.layout-col-left { 
     /* background-color: orangered; */
     /* background-color: rgba(0,0,0,0); */
     background: url('gritty-crop-dark.png');
-    background-size: contain;
-    background-repeat: repeat;
+    /* background-size: contain; */
+    /* background-repeat: repeat; */
     overflow:hidden;
     -ms-overflow-style: none;  /* IE and Edge */
     scrollbar-width: none;  /* Firefox */
@@ -95,4 +98,17 @@ div {
     margin:0;
     width:auto;
     height:auto;
+}
+
+.chip {
+    display:block;
+    margin:0 25px;
+    clear: both;
+    float: none;
+    /* border:1px solid red; */
+}
+
+.chip::after{
+    content: "\a";
+    white-space: pre;
 }

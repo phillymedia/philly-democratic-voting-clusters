@@ -2,6 +2,6 @@ pandas
 nbformat>=4.2.0 
 plotly
 dash
-dash_bootstrap_components
+dash_mantine_components
 pandas_dash
 watchdog
