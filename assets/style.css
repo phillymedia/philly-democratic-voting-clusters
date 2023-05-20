@@ -95,6 +95,7 @@ hr {
 div {
     flex-grow:1;
     padding:0;
+    max-width: none;
     margin:0;
     width:auto;
     height:auto;
@@ -111,4 +112,8 @@ div {
 .chip::after{
     content: "\a";
     white-space: pre;
+}
+
+.container {
+    max-width: none;
 }
