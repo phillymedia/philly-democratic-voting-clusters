@@ -37,14 +37,43 @@ px.set_mapbox_access_token(mapbox_access_token)
 px.defaults.template='plotly_dark'
 
 
-class PhilaPlotFactory(DashFigureFactory):
-    def __init__(self):
-        super().__init__()
-        self.df = fig_data()
-    
-    @cached_property
-    def filter_data(self): return dcc.Store(id='filter_data')
+def is_l(x): return type(x) in {list,tuple}
+def iter_minmaxs(l):
+    if is_l(l):
+        for x in l:
+            if is_l(x):
+                if len(x)==2 and not is_l(x[0]) and not is_l(x[1]):
+                    yield x
+                else:
+                    yield from iter_minmaxs(x)
 
+
+class PhilaPlots(DashFigureFactory):
+    def __init__(self, df=None):
+        super().__init__()
+        self.df = fig_data() if df is None else df
+
+    def filter(self, filter_data={}, with_query=False):
+        if not filter_data:
+            ff=self
+            q=''
+        else:
+            df = self.df.sample(frac=1)
+            ql=[]
+            for k,v in filter_data.items():
+                if is_l(v):
+                    q = ' | '.join(
+                        f'({minv}<={k}<={maxv})'
+                        for minv,maxv in iter_minmaxs(v)
+                    )
+                elif type(v)==str:
+                    q=f'{k}=="{v}"'
+                ql.append(f'({q})')
+            q=' & '.join(ql)
+            df = df.query(q) if q else df
+            ff=PhilaPlots(df=df)
+        return (ff,q) if with_query else ff
+    
     def plot_biplot(self, x_axis, y_axis, qual_col):
         return px.scatter(
             self.df,
@@ -66,13 +95,20 @@ class PhilaPlotFactory(DashFigureFactory):
             self.df[cols]
         )
     
-
-
-
-
-    ###
-
     
+
+
+
+
+
+class Philadata(DashComponent):
+    def __init__(self):
+        super().__init__()
+        self.ff=PhilaPlots()
+
+
+    ### INPUTS
+
     @cached_property
     def x_axis(self):
         return self._select_axis(
@@ -99,8 +135,6 @@ class PhilaPlotFactory(DashFigureFactory):
             value='largest_race'
         )
     
-
-
     def _select_axis(self, id='axis', value='', cols=None, **kwargs):
         if cols is None: cols = get_nonelectoral_cols() + get_electoral_cols()
         options = [dict(label=x.title().replace('_',' '), value=x) for x in cols]
@@ -108,14 +142,22 @@ class PhilaPlotFactory(DashFigureFactory):
             options=options,
             value=value,
         )
+    ####
 
+
+    ### GRAPHS
     
-class Philadata(DashComponent):
-    def __init__(self):
-        super().__init__()
-        self.ff=PhilaPlotFactory()
-        self.biplot = PhilaBiplot(self.ff)
-        self.parcoord = PhilaParcoord(self.ff)
+    @cached_property
+    def graph_biplot(self): return dcc.Graph()
+    @cached_property
+    def graph_parcoord(self): return dcc.Graph(figure=self.ff.plot_parcoords())
+    @cached_property
+    def desc_query(self): return html.Div()
+
+    @cached_property
+    def filter_data(self): return dcc.Store(id='filter_data')
+
+    ### LAYOUT
 
     def layout(self):
         return dbc.Container(
@@ -124,96 +166,34 @@ class Philadata(DashComponent):
                     width=3,
                     class_name='layout-col-left',
                     children=[
-                        self.ff.y_axis,
-                        self.ff.x_axis,
-                        self.ff.qual_col,
-                        self.ff.filter_data
+                        self.y_axis,
+                        self.x_axis,
+                        self.qual_col,
+                        self.filter_data
                     ]
                 ),
 
                 dbc.Col(
                     width=9,
                     children=[
-                        self.biplot.layout(),
-                        self.parcoord.layout(),                        
+                        self.graph_biplot,
+                        self.graph_parcoord,
+                        self.desc_query,
                     ]
                 )
             ]),
         )
     
+
+    ### CALLBACKS
     def component_callbacks(self, app):
-        @app.callback(
-            Output(self.ff.x_axis, 'options'),
-            [
-                Input(self.ff.y_axis,'value'),
-                State(self.ff.x_axis,'value')
-            ]
+        @app.callback(    
+            Output(self.filter_data, "data"),
+            Input(self.graph_parcoord, 'restyleData'),
+            State(self.filter_data, "data"),
         )
-        def update_opts(y_axis, x_axis):
-            qcols = list(get_nonelectoral_cols(quant=True))
-            s = corr_data()[y_axis].loc[qcols].sort_values(ascending=False)
-            options = [
-                dict(label=f'({cor*100:.3}%) {get_label_str(x)}', value=x)
-                for x,cor in zip(s.index, s)
-                if cor != 1
-                and not x+'_share' in set(s.index)
-            ]
-            return options
-
-
-
-    
-
-class PhilaBiplot(DashComponent):
-    def __init__(self, ff):
-        super().__init__()
-
-    def layout(self): return self.graph
-    
-    @cached_property
-    def graph(self): return dcc.Graph()
-    
-    
-    def component_callbacks(self, app):
-        @app.callback(
-            Output(self.graph, 'figure'),
-            [
-                Input(self.ff.x_axis, 'value'),
-                Input(self.ff.y_axis, 'value'),
-                Input(self.ff.qual_col, 'value')
-            ]
-                
-        )
-        def update(x_axis, y_axis, qual_col):
-            return self.ff.plot_biplot(
-                x_axis, 
-                y_axis, 
-                qual_col
-            )
-
-
-
-
-class PhilaParcoord(DashComponent):
-    def __init__(self, ff):
-        super().__init__()
-    
-    def layout(self): 
-        return dbc.Container([self.graph, self.ff.filter_data])
-    
-    @cached_property
-    def graph(self): return dcc.Graph(figure=self.ff.plot_parcoords())
-    @property
-    def figdata(self):
-        return self.graph.figure.data[0]
-
-    def component_callbacks(self, app):
-        @callback(    
-            Output(self.ff.filter_data, "data"),
-            Input(self.graph, 'restyleData'),
-            State(self.ff.filter_data, "data"),
-        )
-        def update(restyledata, filter_data):
+        def parcoord_filter_selected(restyledata, filter_data):
+            print('!?!?!/')
             if filter_data is None: filter_data = {}
             if restyledata and type(restyledata) is list:
                 for d in restyledata:
@@ -221,11 +201,36 @@ class PhilaParcoord(DashComponent):
                         for k,v in d.items():
                             if k.startswith('dimensions['):
                                 dim_i=int(k.split('dimensions[',1)[1].split(']')[0])
-                                dim = self.figdata.dimensions[dim_i]
+                                dim = self.graph_parcoord.figure.data[0].dimensions[dim_i]
                                 key = dim.label
                                 filter_data[key]=v
             print(filter_data)
             return filter_data
+
+        @app.callback(    
+            [
+                Output(self.graph_biplot, "figure"),
+                Output(self.desc_query, "children"),
+            ],
+            [
+                Input(self.filter_data, "data"),
+                Input(self.x_axis,'value'),
+                Input(self.y_axis,'value'),
+                Input(self.qual_col,'value'),
+            ]
+        )
+        def graph_updated(filter_data, x_axis, y_axis, qual_col):
+            if filter_data is None: filter_data={}
+            fff,qstr=self.ff.filter(filter_data, with_query=True)
+
+            return (
+                fff.plot_biplot(
+                    x_axis=x_axis,
+                    y_axis=y_axis,
+                    qual_col=qual_col
+                ),
+                qstr
+            )
 
     
 
