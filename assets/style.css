@@ -1,0 +1,119 @@
+@font-face {
+    font-family: 'philadelphia3d';
+    src: url("philadelphia3d.ttf") format("truetype"); 
+}  
+
+@font-face {
+    font-family: 'philadelphia';
+    src: url("philadelphia.ttf") format("truetype"); 
+}  
+
+
+
+body {
+    font-family: monospace;
+    background-color: #121111;
+    color:yellow;
+    /* font-size: 40px; */
+    /* letter-spacing: .05em; */
+    & .dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner table { 
+        font-family: inherit;
+    }
+}
+
+h1,h2,h3,h4,h5 {
+
+}
+
+h1 { 
+    font-family: 'philadelphia3d', 'Baskerville', 'Arial'; 
+    font-size:100px;
+    letter-spacing: .2em;
+}
+
+#title-div {
+    text-align: center;
+    color:yellow;
+    /* &  */
+}
+
+.card {
+    background: rgba(0,0,0,0);
+}
+
+
+#layout-container {
+    max-width:none;
+}
+#layout-col-right {
+    /* padding: 15px;  */
+    overflow:hidden;
+
+}
+.layout-col-left { 
+    /* background-color: orangered; */
+    /* background-color: rgba(0,0,0,0); */
+    background: url('gritty-crop-dark.png');
+    /* background-size: contain; */
+    /* background-repeat: repeat; */
+    overflow:hidden;
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+    /* background-repeat: no-repeat; */
+    /* border: 1px solid orange; */
+    /* background-color: black; */
+    min-height:100vh;
+    padding-top:15px;
+    padding:0;
+    margin:0;
+
+    & div.row { 
+        margin-bottom:1em;
+    }
+    & label { 
+        /* margin-right:1em; */
+    }
+
+    color: orangered;
+}
+
+.div-for-charts{
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    width: 100%;
+}
+
+.mapboxgl-canvas, .mapboxgl-map {
+    min-width: 100%;
+}
+
+hr { 
+    margin-bottom:1em; 
+}
+
+div {
+    flex-grow:1;
+    padding:0;
+    max-width: none;
+    margin:0;
+    width:auto;
+    height:auto;
+}
+
+.chip {
+    display:block;
+    margin:0 25px;
+    clear: both;
+    float: none;
+    /* border:1px solid red; */
+}
+
+.chip::after{
+    content: "\a";
+    white-space: pre;
+}
+
+.container {
+    max-width: none;
+}
