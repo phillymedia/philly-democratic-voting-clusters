@@ -6,6 +6,8 @@
 TITLE = 'Philadata'
 
 ## Sys imports
+import warnings
+warnings.filterwarnings('ignore')
 from datetime import datetime as dt
 import os,sys,copy,time
 
@@ -21,18 +23,12 @@ import numpy as np
 import pandas as pd
 from dash import Dash, dcc, html, Input, Output, State, dash_table, callback, ctx
 import pandas_dash
-from functools import lru_cache
-
-
+from functools import lru_cache, cached_property
 
 from app_toolbox import *
 from philadata import *
 
-
-
-#############
-# APP SETUP #
-#############
+from dash_oop_components import DashFigureFactory, DashComponent, DashComponentTabs, DashApp
 
 ## Setup plotly
 # Plotly mapbox public token
@@ -40,202 +36,206 @@ mapbox_access_token = open(os.path.expanduser('~/.mapbox_token')).read()
 px.set_mapbox_access_token(mapbox_access_token)
 px.defaults.template='plotly_dark'
 
-# Setup app
-app = Dash(
-    __name__, 
-    meta_tags=[{"name": "viewport", "content": "width=device-width"}],
-    # external_stylesheets=[dbc.themes.BOOTSTRAP],
-    title=TITLE,
-)
-server = app.server
 
-
-def get_select_cols(cols=None, id=None,value=None,input_type=dmc.Select,**kwargs):
-    if cols is None: cols = get_nonelectoral_cols() + get_electoral_cols()
-    return input_type(
-        data=[dict(label=x.title().replace('_',' '), value=x) for x in cols],
-        id=id,
-        value=value,
-        # searchable=True,
-        # clearable=True,
-        # nothingFound="No cols found",
-        className='select',
-        # style={"width": 200},
-        # **kwargs
-    )
-
-
-
-
-
-
-
-
-
-#### LAYOUT ####
-
-
-
-
-def get_x_axis_select():
-    return get_select_cols(
-        id='x-axis', 
-        label='X-axis', 
-        placeholder='Select column for X-axis', 
-        value='edu_attain'
-    )
-def get_y_axis_select():
-    return get_select_cols(
-        id='y-axis',
-        label='Y-axis',
-        placeholder='Select column for Y-axis',
-        value='PRESIDENT OF THE UNITED STATES-DEM_BERNIE SANDERS'
-    )
+class PhilaPlotFactory(DashFigureFactory):
+    def __init__(self):
+        super().__init__()
+        self.df = fig_data()
     
-def get_qual_col_select():
-    return get_select_cols(
-        cols=get_qual_cols(),
-        id='qual-col',
-        label='Color by',
-        placeholder='Select column for color',
-        value='largest_race'
-    )
+    @cached_property
+    def filter_data(self): return dcc.Store(id='filter_data')
+
+    def plot_biplot(self, x_axis, y_axis, qual_col):
+        return px.scatter(
+            self.df,
+            x=x_axis,
+            y=y_axis,
+            color=qual_col,
+            template='plotly_dark',
+            # trendline="ols",
+            # trendline_color_override="orange",
+            # trendline_scope='overall',
+            # trendline_options=dict(frac=0.1)
+            marginal_x='box',
+            marginal_y='box'
+        )
+    
+    def plot_parcoords(self, cols=None):
+        if not cols: cols=get_nonelectoral_cols()
+        return px.parallel_coordinates(
+            self.df[cols]
+        )
+    
 
 
-def get_parcoords():
-    df=precinct_data()[get_nonelectoral_cols()]
-    fig = px.parallel_coordinates(
-        df,
-    )
-    return fig
 
 
+    ###
 
-app.layout = lambda: dmc.MantineProvider(
-    theme={"colorScheme": "dark"},
-    children=[
-        dmc.Grid(
-            children=[
-                dmc.Col(
-                    span=3,
-                    className='layout-col-left',
+    
+    @cached_property
+    def x_axis(self):
+        return self._select_axis(
+            id='x-axis', 
+            placeholder='Select column for X-axis', 
+            value='edu_attain'
+        )
+    
+    @cached_property
+    def y_axis(self):
+        return self._select_axis(
+            id='y-axis',
+            placeholder='Select column for Y-axis',
+            value='PRESIDENT OF THE UNITED STATES-DEM_BERNIE SANDERS'
+        )
+        
+    @cached_property
+    def qual_col(self):
+        return self._select_axis(
+            cols=get_qual_cols(),
+            id='qual-col',
+            label='Color by',
+            placeholder='Select column for color',
+            value='largest_race'
+        )
+    
+
+
+    def _select_axis(self, id='axis', value='', cols=None, **kwargs):
+        if cols is None: cols = get_nonelectoral_cols() + get_electoral_cols()
+        options = [dict(label=x.title().replace('_',' '), value=x) for x in cols]
+        return dbc.Select(
+            options=options,
+            value=value,
+        )
+
+    
+class Philadata(DashComponent):
+    def __init__(self):
+        super().__init__()
+        self.ff=PhilaPlotFactory()
+        self.biplot = PhilaBiplot(self.ff)
+        self.parcoord = PhilaParcoord(self.ff)
+
+    def layout(self):
+        return dbc.Container(
+            dbc.Row([
+                dbc.Col(
+                    width=3,
+                    class_name='layout-col-left',
                     children=[
-                        dmc.Title(TITLE),
-                        dmc.Container(get_qual_col_select(), id='qual-col-container'),
-                        dmc.Container(get_y_axis_select(), id='y-axis-container'),
-                        dmc.Container(get_x_axis_select(), id='x-axis-container'),
+                        self.ff.y_axis,
+                        self.ff.x_axis,
+                        self.ff.qual_col,
+                        self.ff.filter_data
                     ]
                 ),
 
-                dmc.Col(
-                    span=9,
+                dbc.Col(
+                    width=9,
                     children=[
-                        dcc.Graph(id='biplot'),
-                        dcc.Graph(id='parcoord', figure=get_parcoords()),
+                        self.biplot.layout(),
+                        self.parcoord.layout(),                        
                     ]
                 )
+            ]),
+        )
+    
+    def component_callbacks(self, app):
+        @app.callback(
+            Output(self.ff.x_axis, 'options'),
+            [
+                Input(self.ff.y_axis,'value'),
+                State(self.ff.x_axis,'value')
             ]
-        ),
-
-        ## hidden
-        html.Div(id='etcx', style={'display':'none'}),
-        dcc.Store(id='parcoord-data')
-    ]
-)
-
-
-
-
-@callback(    
-    Output('parcoord-data', "data"),
-    Input('parcoord', 'restyleData'),
-    State('parcoord-data', "data"),
-)
-def update_par_coord_graph(restyledata, data):
-    print(data)
-    return (data if data else []) + (restyledata if restyledata else [])
+        )
+        def update_opts(y_axis, x_axis):
+            qcols = list(get_nonelectoral_cols(quant=True))
+            s = corr_data()[y_axis].loc[qcols].sort_values(ascending=False)
+            options = [
+                dict(label=f'({cor*100:.3}%) {get_label_str(x)}', value=x)
+                for x,cor in zip(s.index, s)
+                if cor != 1
+                and not x+'_share' in set(s.index)
+            ]
+            return options
 
 
-@callback(    
-    Output('etcx', "children"),
-    Input('parcoord-data', 'data'),
-)
-def f(x):
-    print('!!!',x)
-
-
-
-
-
-
-
-@callback(
-    Output('x-axis-container', 'children'),
-    [
-        Input('y-axis','value'),
-        State('x-axis','value')
-    ]
-)
-def update_x_axis_options(y_axis, x_axis):
-    qcols = list(get_nonelectoral_cols(quant=True))
-    s = corr_data()[y_axis].loc[qcols].sort_values(ascending=False)
-    options = [
-        (f'({cor*100:.3}%) {get_label_str(x)}', x)
-        for x,cor in zip(s.index, s)
-        if cor != 1
-        and not x+'_share' in set(s.index)
-    ]
-    return get_chip_group(
-        options,
-        label='X-axis options',
-        multiple=False,
-        id='x-axis',
-        value=x_axis if x_axis else options[0][1],
-        # position='center'
-    )
-
-
-
-
-
-
-
-
-@callback(    
-    Output('biplot', "figure"),
-    [
-        Input('x-axis', 'value'),
-        Input('y-axis', 'value'),
-        Input('qual-col', 'value')
-    ]
-)
-def update_map_and_table(x_axis, y_axis, qual_col):
-    fig = px.scatter(
-        fig_data(),
-        x=x_axis,
-        y=y_axis,
-        color=qual_col,
-        template='plotly_dark',
-        # trendline="ols",
-        # trendline_color_override="orange",
-        # trendline_scope='overall',
-        # trendline_options=dict(frac=0.1)
-        marginal_x='box',
-        marginal_y='box'
-    )
-    return fig
 
     
 
+class PhilaBiplot(DashComponent):
+    def __init__(self, ff):
+        super().__init__()
+
+    def layout(self): return self.graph
+    
+    @cached_property
+    def graph(self): return dcc.Graph()
+    
+    
+    def component_callbacks(self, app):
+        @app.callback(
+            Output(self.graph, 'figure'),
+            [
+                Input(self.ff.x_axis, 'value'),
+                Input(self.ff.y_axis, 'value'),
+                Input(self.ff.qual_col, 'value')
+            ]
+                
+        )
+        def update(x_axis, y_axis, qual_col):
+            return self.ff.plot_biplot(
+                x_axis, 
+                y_axis, 
+                qual_col
+            )
 
 
 
 
+class PhilaParcoord(DashComponent):
+    def __init__(self, ff):
+        super().__init__()
+    
+    def layout(self): 
+        return dbc.Container([self.graph, self.ff.filter_data])
+    
+    @cached_property
+    def graph(self): return dcc.Graph(figure=self.ff.plot_parcoords())
+    @property
+    def figdata(self):
+        return self.graph.figure.data[0]
 
+    def component_callbacks(self, app):
+        @callback(    
+            Output(self.ff.filter_data, "data"),
+            Input(self.graph, 'restyleData'),
+            State(self.ff.filter_data, "data"),
+        )
+        def update(restyledata, filter_data):
+            if filter_data is None: filter_data = {}
+            if restyledata and type(restyledata) is list:
+                for d in restyledata:
+                    if type(d) is dict:
+                        for k,v in d.items():
+                            if k.startswith('dimensions['):
+                                dim_i=int(k.split('dimensions[',1)[1].split(']')[0])
+                                dim = self.figdata.dimensions[dim_i]
+                                key = dim.label
+                                filter_data[key]=v
+            print(filter_data)
+            return filter_data
 
-
+    
 
 if __name__ == "__main__":
+    app = DashApp(
+        Philadata(), 
+        # querystrings=True, 
+        bootstrap=True,
+    )
+
     print('running')
     app.run(
         host='0.0.0.0', 
